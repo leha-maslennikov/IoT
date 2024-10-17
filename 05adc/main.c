@@ -27,22 +27,70 @@ PC0 - нулевой канал АЦП. Есть ещё другие: PC1, PC2, 
 #include "xtimer.h"
 #include "timex.h"
 #include "periph/adc.h"
+#include "thread.h"
+#include "periph/gpio.h"
+#include "xtimer.h"
+#include "msg.h"
 
+char thread_one_stack[THREAD_STACKSIZE_DEFAULT];
+char thread_two_stack[THREAD_STACKSIZE_DEFAULT];
+
+static kernel_pid_t thread_one_pid, thread_two_pid;
+static float max_voltage = 10.0f; //TODO: check
+
+void *thread_one(void *arg)
+{
+  (void) arg;
+  msg_t msg; int sample = 0; float voltage = 0, old_voltage = 0;
+  adc_init(ADC_LINE(0)) ;
+  while(1){
+        sample = adc_sample(ADC_LINE(0),  ADC_RES_12BIT);
+        old_voltage = voltage;
+        voltage = 5.0f*sample/1024/4;
+        printf("ADC: %d VOLTAGE: %f \r\n", sample, voltage);
+        
+        if(old_voltage != voltage){
+          msg.content.ptr = &voltage;
+          msg_send(&msg, thread_two_pid);
+        }
+        
+        xtimer_usleep(100'000);
+  }
+  
+  return NULL;
+}
+
+void *thread_two(void *arg) 
+{
+  (void) arg;
+  msg_t msg;
+  gpio_init(GPIO_PIN(PORT_C,8),GPIO_OUT);
+  
+  while(1){
+    msg_receive(&msg);
+    if(*((float*)msg.content.ptr) > max_voltage/2){
+      gpio_set(GPIO_PIN(PORT_C,8));
+    } else {
+      gpio_clear(GPIO_PIN(PORT_C,8));
+    }
+  }
+  
+  return NULL;
+}
 
 int main(void)
 {
-    // переменная, которая будет хранить значение, измеряемое АЦП
-    int sample = 0;
-    // инициализация канала 0 АЦП (пин PC0)
-    adc_init(ADC_LINE(0)) ;
+    thread_one_pid = thread_create(thread_one_stack, sizeof(thread_one_stack),
+                  THREAD_PRIORITY_MAIN - 1, THREAD_CREATE_STACKTEST,
+                  thread_one, NULL, "thread_one");
+
+    thread_two_pid = thread_create(thread_two_stack, sizeof(thread_two_stack),
+                  THREAD_PRIORITY_MAIN - 2, THREAD_CREATE_STACKTEST,
+                  thread_two, NULL, "thread_two");
     while(1){
-        // запуск измерения в канале 0 с разрешением 10 бит
-        sample = adc_sample(ADC_LINE(0),  ADC_RES_10BIT);
-        // печать измеренного значения в UART
-        printf("%d\r\n", sample);
-        // задача ложится спать на 100 мс
-        xtimer_usleep(100000);
+    
     }
+    
     return 0;
 }
 
