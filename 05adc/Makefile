@@ -8,13 +8,14 @@ BOARD ?= stm32f0discovery
 DEVELHELP = 1
 
 # путь до корня исходников RIOT
-RIOTBASE ?= $(CURDIR)/../../RIOT
+RIOTBASE ?= $(CURDIR)/../../../../RIOT
 
 # требуем функцию АЦП
 FEATURES_REQUIRED = periph_adc
 
 # используем модуль системного таймера
 USEMODULE += xtimer
+USEMODULE += printf_float
 
 # подключение следующего мэйкфайла
 include $(RIOTBASE)/Makefile.include
